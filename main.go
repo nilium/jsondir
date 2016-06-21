@@ -32,6 +32,9 @@ import (
 	"unicode"
 )
 
+var logOutput io.Writer = ioutil.Discard
+var errlog = log.New(os.Stderr, "jsondir: ", 0)
+
 // errSkip is returned by a walk function when a file is to be skipped because it was both
 // executable and exited with a status code 65. Any other non-zero status is a failure.
 type SkipFile string
@@ -55,11 +58,15 @@ type prefixWriter struct {
 func newPrefixWriter(w io.Writer, prefix string) *prefixWriter {
 	return &prefixWriter{
 		prefix: []byte("\n" + prefix),
-		w:      os.Stderr,
+		w:      w,
 	}
 }
 
 func (p *prefixWriter) Write(b []byte) (n int, err error) {
+	if p.w == ioutil.Discard {
+		return len(b), nil
+	}
+
 	n = len(b)
 	if n == 0 {
 		return n, nil
@@ -117,19 +124,19 @@ func readProc(name string, arg ...string) (out []byte, err error) {
 		cmd.Dir = dir
 		defer func() {
 			if rmerr := os.RemoveAll(dir); rmerr != nil {
-				log.Print("unable to clean up temp directory ", dir, ": ", err)
+				errlog.Print("unable to clean up temp directory ", dir, ": ", err)
 			}
 		}()
 	}
 
-	stderr := newPrefixWriter(os.Stderr, name+": ")
+	stderr := newPrefixWriter(logOutput, name+": ")
 	cmd.Stderr = stderr
 	out, err = cmd.Output()
 
 	if stderr.lb != '\n' && stderr.firstWrite {
 		_, err := io.WriteString(os.Stderr, "\n")
 		if err != nil {
-			log.Print("unable to write newline to stderr (this will likely fail): ", err)
+			errlog.Print("unable to write newline to stderr (this will likely fail): ", err)
 		}
 	}
 
@@ -247,7 +254,7 @@ func walkDir(fi os.FileInfo, loc string) (result interface{}, err error) {
 	}
 
 	if key == "" {
-		log.Print("skipping invalid file ", loc)
+		errlog.Print("skipping invalid file ", loc)
 		return nil, SkipFile(loc)
 	}
 
@@ -315,7 +322,7 @@ func walkDir(fi os.FileInfo, loc string) (result interface{}, err error) {
 				log.Print(err)
 				continue
 			}
-			log.Print("unable to load file at path ", path, ": ", err)
+			errlog.Print("unable to load file at path ", path, ": ", err)
 			return nil, err
 		}
 	}
@@ -353,6 +360,7 @@ func (ss StringSet) String() string {
 var (
 	ignorePatterns = make(StringSet)
 
+	verbose        = flag.Bool("v", false, "Enable log messages.")
 	compact        = flag.Bool("c", !isTTY(), "Whether to emit compact JSON.")
 	followSymlinks = flag.Bool("s", false, "Whether to follow symlinks.")
 	keepWhitespace = flag.Bool("ws", false, "Keep trailing whitespace in uninterpolated strings.")
@@ -383,6 +391,12 @@ func main() {
 
 	flag.Parse()
 
+	if *verbose {
+		logOutput = os.Stderr
+	}
+
+	log.SetOutput(logOutput)
+
 	if len(ignorePatterns) == 0 {
 		ignorePatterns.Set(".*")
 	}
@@ -394,7 +408,7 @@ func main() {
 		}
 
 		if _, err := filepath.Match(s, "."); err != nil {
-			log.Fatalf("invalid ignore pattern %q: %v", s, err)
+			errlog.Fatalf("invalid ignore pattern %q: %v", s, err)
 		}
 	}
 
@@ -404,7 +418,7 @@ func main() {
 			log.Print(err)
 			continue
 		} else if err != nil {
-			log.Fatal("unable to walk path ", p, ": ", err)
+			errlog.Fatal("unable to walk path ", p, ": ", err)
 		}
 
 		var b []byte
@@ -414,7 +428,7 @@ func main() {
 			b, err = json.MarshalIndent(data, "", "\t")
 		}
 		if err != nil {
-			log.Fatal("unable to marshal result ", p, ": ", err)
+			errlog.Fatal("unable to marshal result ", p, ": ", err)
 		}
 
 		fmt.Printf("%s\n", b)
@@ -425,7 +439,7 @@ func main() {
 func isTTY() bool {
 	fi, err := os.Stdout.Stat()
 	if err != nil {
-		fmt.Fprintln(os.Stderr, "Error getting Stat of os.Stdout:", err)
+		errlog.Println("Error getting Stat of os.Stdout:", err)
 		return true // Assume human readable
 	}
 	return (fi.Mode() & os.ModeNamedPipe) != os.ModeNamedPipe
