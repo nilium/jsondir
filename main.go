@@ -160,7 +160,28 @@ func readProc(name string, arg ...string) (out []byte, err error) {
 	return out, err
 }
 
+func follow(loc string) error {
+	if *followSymlinks {
+		return nil
+	}
+
+	ls, err := os.Lstat(loc)
+	if err != nil {
+		return err
+	}
+
+	if ls.Mode()&os.ModeSymlink == os.ModeSymlink {
+		return SkipFile(loc + " (symlink)")
+	}
+
+	return nil
+}
+
 func walkValue(fi os.FileInfo, loc string) (result interface{}, err error) {
+	if err = follow(loc); err != nil {
+		return nil, err
+	}
+
 	if fi == nil {
 		fi, err = os.Stat(loc)
 		if err != nil {
@@ -291,6 +312,7 @@ func walkDir(fi os.FileInfo, loc string) (result interface{}, err error) {
 		err = walk(i, path, fi)
 		if err != nil {
 			if isSkip(err) {
+				log.Print(err)
 				continue
 			}
 			log.Print("unable to load file at path ", path, ": ", err)
@@ -331,6 +353,7 @@ func (ss StringSet) String() string {
 var (
 	ignorePatterns = make(StringSet)
 
+	followSymlinks = flag.Bool("s", false, "Whether to follow symlinks.")
 	keepWhitespace = flag.Bool("ws", false, "Keep trailing whitespace in uninterpolated strings.")
 	allowExecute   = flag.Bool("x", false, "Allow execution of executable files to generate content.")
 	tmpExec        = flag.Bool("tx", true, "Execute files in a temporary directory.")
@@ -376,7 +399,10 @@ func main() {
 
 	for _, p := range flag.Args() {
 		data, err := walkValue(nil, p)
-		if err != nil {
+		if isSkip(err) {
+			log.Print(err)
+			continue
+		} else if err != nil {
 			log.Fatal("unable to walk path ", p, ": ", err)
 		}
 
@@ -387,4 +413,14 @@ func main() {
 
 		fmt.Printf("%s\n", b)
 	}
+}
+
+// isTTY attempts to determine whether the current stdout refers to a terminal.
+func isTTY() bool {
+	fi, err := os.Stdout.Stat()
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "Error getting Stat of os.Stdout:", err)
+		return true // Assume human readable
+	}
+	return (fi.Mode() & os.ModeNamedPipe) != os.ModeNamedPipe
 }
