@@ -353,6 +353,7 @@ func (ss StringSet) String() string {
 var (
 	ignorePatterns = make(StringSet)
 
+	compact        = flag.Bool("c", !isTTY(), "Whether to emit compact JSON.")
 	followSymlinks = flag.Bool("s", false, "Whether to follow symlinks.")
 	keepWhitespace = flag.Bool("ws", false, "Keep trailing whitespace in uninterpolated strings.")
 	allowExecute   = flag.Bool("x", false, "Allow execution of executable files to generate content.")
@@ -406,7 +407,12 @@ func main() {
 			log.Fatal("unable to walk path ", p, ": ", err)
 		}
 
-		b, err := json.MarshalIndent(data, "", "\t")
+		var b []byte
+		if *compact {
+			b, err = json.Marshal(data)
+		} else {
+			b, err = json.MarshalIndent(data, "", "\t")
+		}
 		if err != nil {
 			log.Fatal("unable to marshal result ", p, ": ", err)
 		}
