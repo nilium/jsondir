@@ -299,8 +299,15 @@ func walkDir(fi os.FileInfo, loc string) (result interface{}, err error) {
 				return SkipFile(path)
 			}
 
-			obj[key], err = walkValue(fi, path)
-			return err
+			r, err := walkValue(fi, path)
+			if isSkip(err) {
+				return nil
+			} else if err != nil {
+				return err
+			}
+
+			obj[key] = r
+			return nil
 		}
 
 		defer func() {
