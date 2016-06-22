@@ -116,7 +116,7 @@ func readProc(name string, arg ...string) (out []byte, err error) {
 	}
 
 	// Create temporary directory for exec
-	if *tmpExec {
+	if !*noTmpExec {
 		dir, err := ioutil.TempDir("", "jsondir-exec")
 		if err != nil {
 			return nil, err
@@ -127,6 +127,8 @@ func readProc(name string, arg ...string) (out []byte, err error) {
 				errlog.Print("unable to clean up temp directory ", dir, ": ", err)
 			}
 		}()
+	} else if *relExec {
+		cmd.Dir = filepath.Dir(cmd.Path)
 	}
 
 	stderr := newPrefixWriter(logOutput, name+": ")
@@ -202,6 +204,9 @@ func walkValue(fi os.FileInfo, loc string) (result interface{}, err error) {
 		return walkDir(fi, loc)
 	case *allowExecute && fi.Mode()&0111 != 0: // Executable
 		data, err = readProc(loc)
+		if err != nil && !isSkip(err) {
+			errlog.Print("error executing ", loc, ": ", err)
+		}
 	default:
 		data, err = ioutil.ReadFile(loc)
 	}
@@ -372,7 +377,8 @@ var (
 	followSymlinks = flag.Bool("s", false, "Whether to follow symlinks.")
 	keepWhitespace = flag.Bool("ws", false, "Keep trailing whitespace in uninterpolated strings.")
 	allowExecute   = flag.Bool("x", false, "Allow execution of executable files to generate content.")
-	tmpExec        = flag.Bool("tx", true, "Execute files in a temporary directory.")
+	noTmpExec      = flag.Bool("nt", false, "Don't execute files from a temporary directory.")
+	relExec        = flag.Bool("rx", false, "Execute files in their directory (instead of pwd or tmp - implies -nt).")
 )
 
 func init() {
@@ -397,6 +403,10 @@ func main() {
 	log.SetFlags(0)
 
 	flag.Parse()
+
+	if *relExec {
+		*noTmpExec = true
+	}
 
 	if *verbose {
 		logOutput = os.Stderr
