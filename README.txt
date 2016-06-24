@@ -30,12 +30,6 @@ working directory, respectively.
 By default, dot files are ignored. If you pass an ignore parameter, this default
 no longer applies.
 
-
-Usage
------
-
-   jsondir [OPTIONS] [path...]
-
 Each path is converted to a JSON value. The path may refer to a file or
 directory -- in the case of a directory, it will produce either an object or an
 array. If a directory's name ends in "[]" (minus quotes), the directory is
@@ -43,6 +37,12 @@ treated as an array. If the name ends in "{}", it's an object. The first of
 either "{}" or "[]" are trimmed from key names when nesting directories. As
 such, to include "[]" at the end of a directory's key name without turning the
 directory into an array, you can name it "yourDirectory[]{}".
+
+
+Usage
+-----
+
+   jsondir [OPTIONS] [path...]
 
 
 Options
