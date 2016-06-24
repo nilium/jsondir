@@ -35,8 +35,9 @@ import (
 var logOutput io.Writer = ioutil.Discard
 var errlog = log.New(os.Stderr, "jsondir: ", 0)
 
-// errSkip is returned by a walk function when a file is to be skipped because it was both
-// executable and exited with a status code 65. Any other non-zero status is a failure.
+// SkipFile errors are returned by walk functions when a file is to be skipped. This can occur if
+// the file is ignored, a symlink (when symlinks are ignored), or if the file was both executable
+// and exited with a status code 65. Any other non-zero status is a failure.
 type SkipFile string
 
 func (s SkipFile) Error() string {
